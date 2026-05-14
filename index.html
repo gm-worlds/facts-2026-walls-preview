@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FACTS 2026 Fall — Mat & Walls 3D Preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0e1015;
+    --panel: rgba(20, 24, 32, 0.88);
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #6ea8ff;
+  }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .panel {
+    position: absolute; z-index: 10;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #header { top: 16px; left: 16px; max-width: 340px; }
+  #header h1 { margin: 0 0 4px; font-size: 15px; letter-spacing: -0.01em; }
+  #header p  { margin: 0; color: var(--muted); font-size: 12px; }
+  #controls { top: 16px; right: 16px; min-width: 240px; }
+  #controls h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  #positions { top: 16px; right: 280px; min-width: 240px; max-width: 280px; }
+  #positions h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  #positions .muted { color: var(--muted); font-weight: normal; text-transform: none; letter-spacing: 0; }
+  #positionsList { font: 12px ui-monospace, Menlo, monospace; line-height: 1.5; }
+  #positionsList .pos-row { display: flex; gap: 8px; align-items: center; }
+  #positionsList .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  body.dragging { cursor: grabbing !important; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+  .row label { flex: 1; }
+  .row input[type=range] { flex: 1; }
+  .row input[type=checkbox] { accent-color: var(--accent); }
+  #legend { bottom: 16px; left: 16px; max-width: 320px; }
+  #legend h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .building { display: flex; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  #help { bottom: 16px; right: 16px; max-width: 280px; font-size: 11px; color: var(--muted); }
+  #help kbd { background: rgba(255,255,255,0.08); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; color: var(--text); font-family: ui-monospace, Menlo, monospace; font-size: 10px; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 100; transition: opacity 0.4s; }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .preset-btn { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font: inherit; cursor: pointer; margin-right: 4px; margin-top: 4px; }
+  .preset-btn:hover { background: rgba(255,255,255,0.12); }
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div></div>
+
+<div id="header" class="panel">
+  <h1>Mat &amp; Walls — 3D Preview</h1>
+  <p>FACTS 2026 Fall · 12 × 17 m floor mat. Best-guess wall placement — adjust positions in <code>index.html</code>.</p>
+</div>
+
+<div id="controls" class="panel">
+  <h2>View</h2>
+  <div class="row"><label>Wall height (m)</label><input type="range" id="wallHeight" min="2" max="4" step="0.05" value="2.5"></div>
+  <div class="row"><label>Sun angle</label><input type="range" id="sunAngle" min="10" max="80" step="1" value="45"></div>
+  <div class="row"><label><input type="checkbox" id="showOutside" checked> Show exterior faces</label></div>
+  <div class="row"><label><input type="checkbox" id="showInside" checked> Show interior faces</label></div>
+  <div class="row"><label><input type="checkbox" id="showLabels" checked> Show wall labels</label></div>
+  <div class="row"><label><input type="checkbox" id="showGrid" checked> Show 1m grid</label></div>
+  <div>
+    <button class="preset-btn" data-view="top">Top</button>
+    <button class="preset-btn" data-view="iso">Iso</button>
+    <button class="preset-btn" data-view="ground">Ground</button>
+  </div>
+  <div style="margin-top:10px"><button class="preset-btn" id="resetBtn">Reset positions</button>
+  <button class="preset-btn" id="copyBtn">Copy layout</button></div>
+</div>
+
+<div id="positions" class="panel">
+  <h2>Tent positions <span class="muted">(NW corner)</span></h2>
+  <div id="positionsList"></div>
+  <div class="muted" style="margin-top:6px;font-size:11px;">Drag a tent on the mat to move it · snaps to 1 m grid</div>
+</div>
+
+<div id="legend" class="panel">
+  <h2>Tents (6 × 3 m × 3 m)</h2>
+  <div class="building"><span class="swatch" style="background:#d45698"></span>Grunk's Tavern — Left + Right (open inner walls)</div>
+  <div class="building"><span class="swatch" style="background:#5a9ed1"></span>Tinkerer's Workshop — TW</div>
+  <div class="building"><span class="swatch" style="background:#d4a93f"></span>Dragon's Lair — DL</div>
+  <div class="building"><span class="swatch" style="background:#7ab35c"></span>Elemental Workshop — EW</div>
+  <div class="building"><span class="swatch" style="background:#3fb5b5"></span>Shady Alley — SA</div>
+</div>
+
+<div id="help" class="panel">
+  Drag to orbit · scroll to zoom · right-drag (or two-finger drag) to pan.
+</div>
+
+<div id="app"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DragControls } from 'three/addons/controls/DragControls.js';
+
+// ─── Mat physical dimensions (meters) ───────────────────────────────────────
+const MAT_W = 17;   // x-axis (image horizontal)
+const MAT_D = 12;   // z-axis (image vertical, "depth")
+// Image preview shows mat oriented landscape; we map image x→world x, image y→world z.
+
+// ─── Building layout (matches user's overlay) ──────────────────────────────
+// All coordinates in meters. Origin (0,0) = top-left corner of the mat looking down.
+// World x: 0..MAT_W (left→right). World z: 0..MAT_D (top→bottom).
+//
+// Buildings (per user's overlay):
+//   Grunk's Tavern: 6m × 3m rectangle, top-center, 6 walls
+//      N split: GTW-3 (left, plastered) | GTW-4 (right, mossy)
+//      S split: GTW-1 (left, mossy)     | GTW-6 (right, plastered)
+//      W: GTW-2 (window)   E: GTW-5 (window)
+//
+//   TW + EW are stacked vertically on the LEFT (TW north, EW south).
+//   DL + SA are stacked vertically on the RIGHT (DL north, SA south).
+//   Each is 3m × 3m.
+//   Position 2 (6m brick-magical window) wraps BOTH buildings' outer long edge
+//      (one 6m canvas covers TW+EW west together, another covers DL+SA east).
+//   Position 4 (2m magical window) is the inner short side facing the courtyard.
+//   Position 3 is the shared wall between TW-EW (or DL-SA): magical-mossy face
+//      on TW/DL side, standard-stone face on EW/SA side.
+//
+// Edit positions in `buildings` below to fine-tune.
+
+const T = {
+  gtw_int_mossy:    'textures/gtw-int-plastered-mossy.jpg',
+  gtw_int_plain:    'textures/gtw-int-plastered.jpg',
+  gtw_int_window:   'textures/gtw-int-window.jpg',
+  gtw_ext_mossy:    'textures/gtw-ext-mossy.jpg',
+  gtw_ext_window:   'textures/gtw-ext-window-mossy.jpg',
+  gtw_ext_graffiti: 'textures/gtw-ext-window-graffiti.jpg',
+  stone_magical:    'textures/stone-magical-mossy.jpg',
+  stone_standard:   'textures/stone-standard.jpg',
+  window_brick:     'textures/window-brick-magical.jpg',     // 3m × 2.5m single window
+  window_brick_6m:  'textures/window-brick-magical-6m.jpg',  // 6m × 2.5m double window
+  window_2m:        'textures/window-2m-magical.jpg',
+};
+
+// Wall canvas dimensions (meters).
+// Standard wall: 3m wide × 2.5m tall (wider than tall — aspect 1.2:1).
+// 6m double window: 6m × 2.5m.   2m magical window: 2m × 2.5m.
+const STD_W  = 3.0;
+const WIDE_W = 6.0;
+const NAR_W  = 2.0;
+const ASPECT_STD = 1.201;
+const ASPECT_NAR = 0.803;
+
+// 6 party tents (3m × 3m each), 1m gaps between them, snapped to 1m grid.
+//   Grunk's L:  x=5..8,   z=0..3   (east side OPEN — central passage)
+//   Grunk's R:  x=9..12,  z=0..3   (west side OPEN — central passage)
+//   TW:         x=1..4,   z=4..7   (east 2m wall, 1m entrance on south end)
+//   DL:         x=13..16, z=4..7   (west 2m wall, 1m entrance on south end)
+//   EW:         x=1..4,   z=8..11  (east 2m wall, 1m entrance on north end)
+//   SA:         x=13..16, z=8..11  (west 2m wall, 1m entrance on north end)
+// The 2m walls (position-4) create 1m walk-in entrances to the 4 outer tents,
+// arranged so all entrances face the central courtyard / pond area.
+
+const buildings = [
+  // ── GRUNK'S TAVERN — 2 tents (Left + Right) at top center ─────────────
+  {
+    name: "Grunk's Tavern — Left tent",
+    short: "GTW-L",
+    color: 0xd45698,
+    footprint: { x: 5, z: 0, w: 3, d: 3 },
+    walls: [
+      { // North wall — GTW-3 (plastered, exterior mossy)
+        start: [5, 0], end: [8, 0],
+        panels: [{ label: 'GTW-3', w: STD_W, inside: T.gtw_int_plain, outside: T.gtw_ext_mossy }],
+        outsideOnNegativeSide: false,
+      },
+      { // West wall — GTW-2 (window inside, mossy window outside)
+        start: [5, 0], end: [5, 3],
+        panels: [{ label: 'GTW-2', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
+        outsideOnNegativeSide: true,
+      },
+      { // South wall — GTW-1 (plastered mossy)
+        start: [5, 3], end: [8, 3],
+        panels: [{ label: 'GTW-1', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
+        outsideOnNegativeSide: true,
+      },
+      // East wall: OPEN (faces Grunk's Right across 1m passage)
+    ],
+  },
+  {
+    name: "Grunk's Tavern — Right tent",
+    short: "GTW-R",
+    color: 0xd45698,
+    footprint: { x: 9, z: 0, w: 3, d: 3 },
+    walls: [
+      { // North wall — GTW-4 (plastered mossy)
+        start: [9, 0], end: [12, 0],
+        panels: [{ label: 'GTW-4', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
+        outsideOnNegativeSide: false,
+      },
+      { // East wall — GTW-5 (window inside, graffiti outside)
+        start: [12, 0], end: [12, 3],
+        panels: [{ label: 'GTW-5', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_graffiti }],
+        outsideOnNegativeSide: false,
+      },
+      { // South wall — GTW-6 (plastered)
+        start: [9, 3], end: [12, 3],
+        panels: [{ label: 'GTW-6', w: STD_W, inside: T.gtw_int_plain, outside: T.gtw_ext_mossy }],
+        outsideOnNegativeSide: true,
+      },
+      // West wall: OPEN (faces Grunk's Left across 1m passage)
+    ],
+  },
+
+  // ── TINKERER'S WORKSHOP (TW) — top-left ───────────────────────────────
+  {
+    name: "Tinkerer's Workshop (TW)",
+    short: "TW",
+    color: 0x5a9ed1,
+    footprint: { x: 1, z: 4, w: 3, d: 3 },
+    walls: [
+      { // North wall — TWI-1 (magical mossy)
+        start: [1, 4], end: [4, 4],
+        panels: [{ label: 'TWI-1', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
+        outsideOnNegativeSide: false,
+      },
+      { // West wall — TWI-2 (brick magical window, outer side facing mat edge)
+        start: [1, 4], end: [1, 7],
+        panels: [{ label: 'TWI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
+        outsideOnNegativeSide: true,
+      },
+      { // South wall — TWI-3 (magical mossy, faces EW across 1m gap)
+        start: [1, 7], end: [4, 7],
+        panels: [{ label: 'TWI-3', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
+        outsideOnNegativeSide: true,
+      },
+      { // East wall — TWI-4 (2m magical window, placed at SOUTH end adjacent to TW⇄EW gap; 1m entrance at NORTH end)
+        start: [4, 5], end: [4, 7],
+        panels: [{ label: 'TWI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
+        outsideOnNegativeSide: false,
+      },
+    ],
+  },
+
+  // ── DRAGON'S LAIR (DL) — top-right ────────────────────────────────────
+  {
+    name: "Dragon's Lair (DL)",
+    short: "DL",
+    color: 0xd4a93f,
+    footprint: { x: 13, z: 4, w: 3, d: 3 },
+    walls: [
+      { // North wall — DLI-1 (magical mossy)
+        start: [13, 4], end: [16, 4],
+        panels: [{ label: 'DLI-1', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
+        outsideOnNegativeSide: false,
+      },
+      { // East wall — DLI-2 (brick magical window, outer side facing mat edge)
+        start: [16, 4], end: [16, 7],
+        panels: [{ label: 'DLI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
+        outsideOnNegativeSide: false,
+      },
+      { // South wall — DLI-3 (magical mossy, faces SA across 1m gap)
+        start: [13, 7], end: [16, 7],
+        panels: [{ label: 'DLI-3', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
+        outsideOnNegativeSide: true,
+      },
+      { // West wall — DLI-4 (2m magical window, placed at SOUTH end adjacent to DL⇄SA gap; 1m entrance at NORTH end)
+        start: [13, 5], end: [13, 7],
+        panels: [{ label: 'DLI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
+        outsideOnNegativeSide: true,
+      },
+    ],
+  },
+
+  // ── ELEMENTAL WORKSHOP (EW) — bottom-left ─────────────────────────────
+  {
+    name: 'Elemental Workshop (EW)',
+    short: "EW",
+    color: 0x7ab35c,
+    footprint: { x: 1, z: 8, w: 3, d: 3 },
+    walls: [
+      { // North wall — EWI-3 (standard stone, faces TW across 1m gap)
+        start: [1, 8], end: [4, 8],
+        panels: [{ label: 'EWI-3', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
+        outsideOnNegativeSide: false,
+      },
+      { // West wall — EWI-2 (brick magical window, outer side facing mat edge)
+        start: [1, 8], end: [1, 11],
+        panels: [{ label: 'EWI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
+        outsideOnNegativeSide: true,
+      },
+      { // South wall — EWI-1 (standard stone)
+        start: [1, 11], end: [4, 11],
+        panels: [{ label: 'EWI-1', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
+        outsideOnNegativeSide: true,
+      },
+      { // East wall — EWI-4 (2m magical window, placed at NORTH end adjacent to TW⇄EW gap; 1m entrance at SOUTH end)
+        start: [4, 8], end: [4, 10],
+        panels: [{ label: 'EWI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
+        outsideOnNegativeSide: false,
+      },
+    ],
+  },
+
+  // ── SHADY ALLEY (SA) — bottom-right ───────────────────────────────────
+  {
+    name: 'Shady Alley (SA)',
+    short: "SA",
+    color: 0x3fb5b5,
+    footprint: { x: 13, z: 8, w: 3, d: 3 },
+    walls: [
+      { // North wall — SAI-3 (standard stone, faces DL across 1m gap)
+        start: [13, 8], end: [16, 8],
+        panels: [{ label: 'SAI-3', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
+        outsideOnNegativeSide: false,
+      },
+      { // East wall — SAI-2 (brick magical window, outer side facing mat edge)
+        start: [16, 8], end: [16, 11],
+        panels: [{ label: 'SAI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
+        outsideOnNegativeSide: false,
+      },
+      { // South wall — SAI-1 (standard stone)
+        start: [13, 11], end: [16, 11],
+        panels: [{ label: 'SAI-1', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
+        outsideOnNegativeSide: true,
+      },
+      { // West wall — SAI-4 (2m magical window, placed at NORTH end adjacent to DL⇄SA gap; 1m entrance at SOUTH end)
+        start: [13, 8], end: [13, 10],
+        panels: [{ label: 'SAI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
+        outsideOnNegativeSide: true,
+      },
+    ],
+  },
+];
+
+// ─── Scene ─────────────────────────────────────────────────────────────────
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9ec5e8);
+scene.fog = new THREE.Fog(0x9ec5e8, 30, 80);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(MAT_W * 0.5 + 10, 14, MAT_D + 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(MAT_W * 0.5, 0, MAT_D * 0.5);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 3;
+controls.maxDistance = 80;
+controls.update();
+
+// ─── Lights ─────────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambient);
+const hemi = new THREE.HemisphereLight(0xb8d8ff, 0x4a5640, 0.35);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff2d8, 1.1);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 80;
+sun.shadow.camera.left = -MAT_W;
+sun.shadow.camera.right = MAT_W;
+sun.shadow.camera.top = MAT_D;
+sun.shadow.camera.bottom = -MAT_D;
+sun.shadow.bias = -0.0002;
+scene.add(sun);
+const setSun = (deg) => {
+  const a = THREE.MathUtils.degToRad(deg);
+  sun.position.set(MAT_W * 0.5 + Math.cos(a) * 20, Math.sin(a) * 20, MAT_D * 0.3 - Math.cos(a) * 10);
+  sun.target.position.set(MAT_W * 0.5, 0, MAT_D * 0.5);
+  sun.target.updateMatrixWorld();
+};
+setSun(45);
+
+// ─── Floor mat ──────────────────────────────────────────────────────────────
+const texLoader = new THREE.TextureLoader();
+const loadTex = (path) => new Promise((res, rej) => {
+  texLoader.load(path, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    res(t);
+  }, undefined, rej);
+});
+
+const groundGeom = new THREE.PlaneGeometry(MAT_W, MAT_D);
+groundGeom.rotateX(-Math.PI / 2);
+groundGeom.translate(MAT_W / 2, 0, MAT_D / 2);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.95 });
+const ground = new THREE.Mesh(groundGeom, groundMat);
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Ring border around the mat
+const borderGeom = new THREE.PlaneGeometry(MAT_W + 6, MAT_D + 6);
+borderGeom.rotateX(-Math.PI / 2);
+borderGeom.translate(MAT_W / 2, -0.02, MAT_D / 2);
+const borderMat = new THREE.MeshStandardMaterial({ color: 0x3a4a35, roughness: 1 });
+scene.add(new THREE.Mesh(borderGeom, borderMat));
+
+// ─── 1×1m grid overlay ─────────────────────────────────────────────────────
+const gridGroup = new THREE.Group();
+gridGroup.name = 'grid';
+const gridMatMinor = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22 });
+const gridMatMajor = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+for (let x = 0; x <= MAT_W; x++) {
+  const geom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x, 0.012, 0),
+    new THREE.Vector3(x, 0.012, MAT_D),
+  ]);
+  gridGroup.add(new THREE.Line(geom, x % 5 === 0 ? gridMatMajor : gridMatMinor));
+}
+for (let z = 0; z <= MAT_D; z++) {
+  const geom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0.012, z),
+    new THREE.Vector3(MAT_W, 0.012, z),
+  ]);
+  gridGroup.add(new THREE.Line(geom, z % 5 === 0 ? gridMatMajor : gridMatMinor));
+}
+scene.add(gridGroup);
+
+// ─── Wall builder ──────────────────────────────────────────────────────────
+const tents = [];   // [{ group, building }]
+const labels = [];  // sprite labels (for toggle)
+
+function makeLabel(text, color) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(20,24,32,0.85)';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.strokeStyle = '#ffffff44'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, 254, 62);
+  ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+  ctx.fillRect(8, 24, 16, 16);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 26px -apple-system, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 34, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const s = new THREE.Sprite(mat);
+  s.scale.set(1.6, 0.4, 1);
+  return s;
+}
+
+async function buildWalls(wallHeight) {
+  // Save current drag positions so a wall-height change doesn't reset placements
+  const savedOffsets = new Map();
+  for (const t of tents) {
+    savedOffsets.set(t.building.short, { x: t.group.position.x, z: t.group.position.z });
+  }
+
+  // clear old
+  tents.forEach(t => {
+    scene.remove(t.group);
+    t.group.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose && m.dispose());
+        else o.material.dispose && o.material.dispose();
+      }
+    });
+  });
+  tents.length = 0;
+  labels.length = 0;
+
+  for (const building of buildings) {
+    const tentGroup = new THREE.Group();
+    tentGroup.name = building.short;
+    tentGroup.userData = { tent: true, building };
+
+    // Footprint marker (semi-transparent colored floor — also helps with click/raycast)
+    const fp = building.footprint;
+    const floorGeom = new THREE.PlaneGeometry(fp.w, fp.d);
+    floorGeom.rotateX(-Math.PI / 2);
+    const floorMat = new THREE.MeshBasicMaterial({
+      color: building.color, transparent: true, opacity: 0.18, depthWrite: false
+    });
+    const floor = new THREE.Mesh(floorGeom, floorMat);
+    floor.position.set(fp.x + fp.w / 2, 0.02, fp.z + fp.d / 2);
+    floor.userData.isFootprint = true;
+    tentGroup.add(floor);
+
+    // Tent label on the floor (small badge at NW corner)
+    const tentLabel = makeLabel(building.short, building.color);
+    tentLabel.position.set(fp.x + fp.w / 2, 0.04, fp.z + fp.d / 2);
+    tentLabel.scale.set(1.4, 0.36, 1);
+    tentLabel.userData.isTentLabel = true;
+    tentGroup.add(tentLabel);
+
+    for (const wall of building.walls) {
+      const [sx, sz] = wall.start;
+      const [ex, ez] = wall.end;
+      const dx = ex - sx, dz = ez - sz;
+      const totalLen = Math.hypot(dx, dz);
+      const dirX = dx / totalLen, dirZ = dz / totalLen;
+      const outsideSign = wall.outsideOnNegativeSide ? -1 : 1;
+
+      let accum = 0;
+      for (const panel of wall.panels) {
+        const insideTex = await loadTex(panel.inside);
+        const outsideTex = await loadTex(panel.outside);
+
+        const panelW = panel.w;
+        const actualH = wallHeight;
+
+        // Two thin planes back-to-back so each face can have its own texture
+        const geomIn = new THREE.PlaneGeometry(panelW, actualH);
+        const matIn = new THREE.MeshStandardMaterial({ map: insideTex, roughness: 0.92, metalness: 0, side: THREE.FrontSide });
+        const meshIn = new THREE.Mesh(geomIn, matIn);
+        meshIn.userData = { face: 'inside', label: panel.label };
+        meshIn.castShadow = true; meshIn.receiveShadow = true;
+
+        const geomOut = new THREE.PlaneGeometry(panelW, actualH);
+        const matOut = new THREE.MeshStandardMaterial({ map: outsideTex, roughness: 0.92, metalness: 0, side: THREE.FrontSide });
+        const meshOut = new THREE.Mesh(geomOut, matOut);
+        meshOut.rotation.y = Math.PI;
+        meshOut.userData = { face: 'outside', label: panel.label };
+        meshOut.castShadow = true; meshOut.receiveShadow = true;
+
+        // Position panel along wall (absolute coords inside tentGroup — works because tentGroup starts at 0,0,0)
+        const cx = sx + (accum + panelW / 2) * dirX;
+        const cz = sz + (accum + panelW / 2) * dirZ;
+        const cy = actualH / 2;
+
+        const panelGroup = new THREE.Group();
+        panelGroup.position.set(cx, cy, cz);
+        const yaw = Math.atan2(dirX, dirZ);
+        panelGroup.rotation.y = yaw + (outsideSign > 0 ? Math.PI : 0);
+        meshIn.position.z = 0.005;
+        meshOut.position.z = -0.005;
+        panelGroup.add(meshIn);
+        panelGroup.add(meshOut);
+        tentGroup.add(panelGroup);
+
+        // Label sprite
+        const label = makeLabel(panel.label, building.color);
+        label.position.set(cx, actualH + 0.55, cz);
+        label.userData.isWallLabel = true;
+        tentGroup.add(label);
+        labels.push(label);
+
+        accum += panelW;
+      }
+    }
+
+    // Restore previous drag offset (if any)
+    const saved = savedOffsets.get(building.short);
+    if (saved) tentGroup.position.set(saved.x, 0, saved.z);
+
+    scene.add(tentGroup);
+    tents.push({ group: tentGroup, building });
+  }
+
+  rebuildDragControls();
+  applyVisibility();
+  updatePositionsPanel();
+}
+
+function applyVisibility() {
+  const showIn = document.getElementById('showInside').checked;
+  const showOut = document.getElementById('showOutside').checked;
+  const showLabels = document.getElementById('showLabels').checked;
+  const showGrid = document.getElementById('showGrid').checked;
+  for (const t of tents) {
+    t.group.traverse(o => {
+      if (o.userData && o.userData.face === 'inside') o.visible = showIn;
+      if (o.userData && o.userData.face === 'outside') o.visible = showOut;
+      if (o.userData && o.userData.isWallLabel) o.visible = showLabels;
+    });
+  }
+  gridGroup.visible = showGrid;
+}
+
+// ─── Drag controls ─────────────────────────────────────────────────────────
+let dragControls = null;
+function rebuildDragControls() {
+  if (dragControls) {
+    dragControls.deactivate();
+    dragControls.dispose();
+  }
+  dragControls = new DragControls(tents.map(t => t.group), camera, renderer.domElement);
+  dragControls.recursive = true;
+  dragControls.addEventListener('dragstart', (e) => {
+    controls.enabled = false;
+    document.body.classList.add('dragging');
+    // Lift the dragged tent slightly so its movement is obvious
+    e.object.userData.dragStartY = e.object.position.y;
+  });
+  dragControls.addEventListener('drag', (e) => {
+    const tent = tents.find(t => t.group === e.object);
+    if (!tent) return;
+    const fp = tent.building.footprint;
+    // Snap to 1m grid (event.object.position is the tent's offset; original corner = fp.x, fp.z)
+    e.object.position.y = 0;
+    e.object.position.x = Math.round(e.object.position.x);
+    e.object.position.z = Math.round(e.object.position.z);
+    // Clamp so the tent stays on the mat
+    const minX = -fp.x;
+    const maxX = MAT_W - fp.x - fp.w;
+    const minZ = -fp.z;
+    const maxZ = MAT_D - fp.z - fp.d;
+    e.object.position.x = Math.max(minX, Math.min(maxX, e.object.position.x));
+    e.object.position.z = Math.max(minZ, Math.min(maxZ, e.object.position.z));
+    updatePositionsPanel();
+  });
+  dragControls.addEventListener('dragend', () => {
+    controls.enabled = true;
+    document.body.classList.remove('dragging');
+    updatePositionsPanel();
+  });
+}
+
+function tentPosition(tent) {
+  const fp = tent.building.footprint;
+  return {
+    x: fp.x + tent.group.position.x,
+    z: fp.z + tent.group.position.z,
+  };
+}
+
+function updatePositionsPanel() {
+  const list = document.getElementById('positionsList');
+  if (!list) return;
+  list.innerHTML = '';
+  for (const t of tents) {
+    const p = tentPosition(t);
+    const row = document.createElement('div');
+    row.className = 'pos-row';
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    swatch.style.background = '#' + t.building.color.toString(16).padStart(6, '0');
+    row.appendChild(swatch);
+    const text = document.createElement('span');
+    text.textContent = `${t.building.short.padEnd(6)} (${p.x}, ${p.z}) → (${p.x + t.building.footprint.w}, ${p.z + t.building.footprint.d})`;
+    row.appendChild(text);
+    list.appendChild(row);
+  }
+}
+
+function resetPositions() {
+  for (const t of tents) t.group.position.set(0, 0, 0);
+  updatePositionsPanel();
+}
+
+function copyLayout() {
+  const lines = [
+    `FACTS 2026 Fall — Mat layout (17 × 12 m, 1 m grid)`,
+    `Each tent is 3 × 3 m. Coordinates are NW corner → SE corner (in meters):`,
+    ``,
+  ];
+  for (const t of tents) {
+    const p = tentPosition(t);
+    lines.push(`  ${t.building.short.padEnd(6)} ${t.building.name}`);
+    lines.push(`         (${p.x}, ${p.z}) → (${p.x + t.building.footprint.w}, ${p.z + t.building.footprint.d})`);
+  }
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(
+    () => { const b = document.getElementById('copyBtn'); const o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(() => b.textContent = o, 1500); },
+    () => { alert(text); }
+  );
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const matTex = await loadTex('textures/floor-mat.jpg');
+    matTex.colorSpace = THREE.SRGBColorSpace;
+    groundMat.map = matTex;
+    groundMat.color.set(0xffffff);
+    groundMat.needsUpdate = true;
+  } catch (e) {
+    console.warn('Mat texture failed to load', e);
+  }
+
+  await buildWalls(parseFloat(document.getElementById('wallHeight').value));
+  document.getElementById('loading').classList.add('hide');
+}
+
+// ─── Wire controls ─────────────────────────────────────────────────────────
+document.getElementById('wallHeight').addEventListener('input', (e) => buildWalls(parseFloat(e.target.value)));
+document.getElementById('sunAngle').addEventListener('input', (e) => setSun(parseFloat(e.target.value)));
+document.getElementById('showInside').addEventListener('change', applyVisibility);
+document.getElementById('showOutside').addEventListener('change', applyVisibility);
+document.getElementById('showLabels').addEventListener('change', applyVisibility);
+document.getElementById('showGrid').addEventListener('change', applyVisibility);
+document.getElementById('resetBtn').addEventListener('click', resetPositions);
+document.getElementById('copyBtn').addEventListener('click', copyLayout);
+
+document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => {
+  const v = b.dataset.view;
+  const cx = MAT_W * 0.5, cz = MAT_D * 0.5;
+  controls.target.set(cx, 0, cz);
+  if (v === 'top')    camera.position.set(cx, 22, cz + 0.01);
+  if (v === 'iso')    camera.position.set(cx + 14, 13, cz + 18);
+  if (v === 'ground') camera.position.set(cx + 8, 2.0, cz + 12);
+  controls.update();
+}));
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+init();
+animate();
+</script>
+</body>
+</html>
