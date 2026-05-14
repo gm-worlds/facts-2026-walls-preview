@@ -273,19 +273,19 @@ const buildings = [
     color: 0xd45698,
     footprint: { x: 5, z: 0, w: 3, d: 3 },
     walls: [
-      { // North wall — GTW-3 (plastered, exterior mossy)
+      { // North wall — GTW-3 (WINDOW, faces north mat edge)
         start: [5, 0], end: [8, 0],
-        panels: [{ label: 'GTW-3', w: STD_W, inside: T.gtw_int_plain, outside: T.gtw_ext_mossy }],
+        panels: [{ label: 'GTW-3', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
         outsideOnNegativeSide: false,
       },
-      { // West wall — GTW-2 (window inside, mossy window outside)
+      { // West wall — GTW-2 (plastered mossy, faces west mat edge)
         start: [5, 0], end: [5, 3],
-        panels: [{ label: 'GTW-2', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
+        panels: [{ label: 'GTW-2', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
         outsideOnNegativeSide: true,
       },
-      { // South wall — GTW-1 (plastered mossy)
+      { // South wall — GTW-1 (WINDOW, faces courtyard)
         start: [5, 3], end: [8, 3],
-        panels: [{ label: 'GTW-1', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
+        panels: [{ label: 'GTW-1', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
         outsideOnNegativeSide: true,
       },
       // East wall: OPEN (faces Grunk's Right across 1m passage)
@@ -297,19 +297,19 @@ const buildings = [
     color: 0xd45698,
     footprint: { x: 9, z: 0, w: 3, d: 3 },
     walls: [
-      { // North wall — GTW-4 (plastered mossy)
+      { // North wall — GTW-4 (WINDOW, faces north mat edge)
         start: [9, 0], end: [12, 0],
-        panels: [{ label: 'GTW-4', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
+        panels: [{ label: 'GTW-4', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
         outsideOnNegativeSide: false,
       },
-      { // East wall — GTW-5 (window inside, graffiti outside)
+      { // East wall — GTW-5 (plastered mossy, faces east mat edge)
         start: [12, 0], end: [12, 3],
-        panels: [{ label: 'GTW-5', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_graffiti }],
+        panels: [{ label: 'GTW-5', w: STD_W, inside: T.gtw_int_mossy, outside: T.gtw_ext_mossy }],
         outsideOnNegativeSide: false,
       },
-      { // South wall — GTW-6 (plastered)
+      { // South wall — GTW-6 (WINDOW, faces courtyard)
         start: [9, 3], end: [12, 3],
-        panels: [{ label: 'GTW-6', w: STD_W, inside: T.gtw_int_plain, outside: T.gtw_ext_mossy }],
+        panels: [{ label: 'GTW-6', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
         outsideOnNegativeSide: true,
       },
       // West wall: OPEN (faces Grunk's Left across 1m passage)
