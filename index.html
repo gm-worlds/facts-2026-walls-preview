@@ -543,7 +543,17 @@ async function buildWalls(wallHeight) {
       const dx = ex - sx, dz = ez - sz;
       const totalLen = Math.hypot(dx, dz);
       const dirX = dx / totalLen, dirZ = dz / totalLen;
-      const outsideSign = wall.outsideOnNegativeSide ? -1 : 1;
+
+      // Auto-detect which face is inside: compute the wall midpoint and check
+      // whether the plane's natural normal (perp CCW of wall direction) points
+      // toward the tent center. If not, flip the plane by 180° so the inside
+      // texture always faces inward.
+      const midX = (sx + ex) / 2;
+      const midZ = (sz + ez) / 2;
+      const towardCenterX = centerX - midX;
+      const towardCenterZ = centerZ - midZ;
+      const perpX = -dirZ, perpZ = dirX;  // perp CCW of wall direction
+      const flipForInside = (perpX * towardCenterX + perpZ * towardCenterZ) < 0;
 
       let accum = 0;
       for (const panel of wall.panels) {
@@ -566,7 +576,7 @@ async function buildWalls(wallHeight) {
         meshOut.userData = { face: 'outside', label: panel.label };
         meshOut.castShadow = true; meshOut.receiveShadow = true;
 
-        // Coords RELATIVE to tent center (so rotation around the group origin pivots on the center)
+        // Local coords (relative to tent center)
         const worldCx = sx + (accum + panelW / 2) * dirX;
         const worldCz = sz + (accum + panelW / 2) * dirZ;
         const cx = worldCx - centerX;
@@ -575,8 +585,11 @@ async function buildWalls(wallHeight) {
 
         const panelGroup = new THREE.Group();
         panelGroup.position.set(cx, cy, cz);
-        const yaw = Math.atan2(dirX, dirZ);
-        panelGroup.rotation.y = yaw + (outsideSign > 0 ? Math.PI : 0);
+        // CORRECT yaw: aligns plane's local +X with the wall direction in world XZ.
+        // After R_y(α), local +X = (cos α, 0, -sin α). Setting that equal to (dirX, 0, dirZ)
+        // gives α = atan2(-dirZ, dirX).
+        const yaw = Math.atan2(-dirZ, dirX);
+        panelGroup.rotation.y = yaw + (flipForInside ? Math.PI : 0);
         meshIn.position.z = 0.005;
         meshOut.position.z = -0.005;
         panelGroup.add(meshIn);
