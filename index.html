@@ -82,8 +82,11 @@
     <button class="preset-btn" data-view="iso">Iso</button>
     <button class="preset-btn" data-view="ground">Ground</button>
   </div>
-  <div style="margin-top:10px"><button class="preset-btn" id="resetBtn">Reset positions</button>
-  <button class="preset-btn" id="copyBtn">Copy layout</button></div>
+  <div style="margin-top:10px">
+    <button class="preset-btn" id="resetBtn">Reset positions</button>
+    <button class="preset-btn" id="copyBtn">Copy layout</button>
+    <button class="preset-btn" id="shareBtn">Copy share link</button>
+  </div>
 </div>
 
 <div id="positions" class="panel">
@@ -618,6 +621,9 @@ async function buildWalls(wallHeight) {
     tents.push({ group: tentGroup, building });
   }
 
+  // Restore from URL hash (or localStorage as fallback)
+  applyLayoutToTents(loadLayout());
+
   applyVisibility();
   updatePositionsPanel();
 }
@@ -704,6 +710,7 @@ window.addEventListener('pointerup', () => {
   controls.enabled = true;
   document.body.classList.remove('dragging');
   updatePositionsPanel();
+  saveLayout();
 });
 
 // Double-click rotates a tent 90° CW around its own center
@@ -720,6 +727,7 @@ function rotateTent(tent, deltaRad) {
   const step = Math.round(tent.group.rotation.y / (Math.PI / 2));
   tent.group.rotation.y = step * (Math.PI / 2);
   updatePositionsPanel();
+  saveLayout();
 }
 
 function tentPosition(tent) {
@@ -734,6 +742,93 @@ function tentPosition(tent) {
 function tentRotationDeg(tent) {
   const step = ((Math.round(tent.group.rotation.y / (Math.PI / 2)) % 4) + 4) % 4;
   return step * 90;
+}
+
+// ─── Layout persistence (URL hash + localStorage backup) ───────────────────
+// The URL hash carries the layout so a shared link reproduces the exact placement.
+// localStorage is a fallback for the user's own browser if they open the bare URL.
+const LS_KEY = 'facts2026-tent-layout-v1';
+
+function buildLayoutString() {
+  // Compact form: TW=1,4,0;EW=1,8,90;... where x,z are NW corner and rot is degrees
+  const parts = [];
+  for (const t of tents) {
+    const p = tentPosition(t);
+    const rot = tentRotationDeg(t);
+    parts.push(`${t.building.short}=${p.x},${p.z},${rot}`);
+  }
+  return parts.join(';');
+}
+
+function parseLayoutString(s) {
+  if (!s) return null;
+  const data = {};
+  for (const piece of s.split(';')) {
+    const [key, val] = piece.split('=');
+    if (!key || !val) continue;
+    const [xs, zs, rs] = val.split(',');
+    const x = Number(xs), z = Number(zs), rotDeg = Number(rs);
+    if ([x, z, rotDeg].some(v => Number.isNaN(v))) continue;
+    data[key] = { x, z, rotDeg };
+  }
+  return Object.keys(data).length ? data : null;
+}
+
+function applyLayoutToTents(data) {
+  if (!data) return;
+  for (const t of tents) {
+    const entry = data[t.building.short];
+    if (!entry) continue;
+    const fp = t.building.footprint;
+    t.group.position.x = entry.x + fp.w / 2;
+    t.group.position.z = entry.z + fp.d / 2;
+    t.group.rotation.y = -(entry.rotDeg) * Math.PI / 180;  // -° because CW = -y in our coords
+  }
+}
+
+let _saveTimer = null;
+function saveLayout() {
+  const layoutStr = buildLayoutString();
+  // Throttle URL writes so dragging doesn't spam history
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    history.replaceState(null, '', '#' + layoutStr);
+    try { localStorage.setItem(LS_KEY, layoutStr); } catch (e) {}
+  }, 80);
+}
+
+function loadLayout() {
+  // URL hash wins (so shared links override local state)
+  const hash = window.location.hash.replace(/^#/, '');
+  const fromHash = parseLayoutString(decodeURIComponent(hash));
+  if (fromHash) return fromHash;
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    // Old localStorage entries might be JSON — try that first, fall back to string
+    if (raw.startsWith('{')) {
+      const obj = JSON.parse(raw);
+      const data = {};
+      for (const [k, v] of Object.entries(obj)) {
+        // Old format used center coords + radians; convert back to NW + degrees
+        // (Best effort: if values look like numbers, treat them as the new format)
+        if (v && typeof v.x === 'number') {
+          // Old saved center.x; we can't easily recover building footprint here
+          // so just skip — user will see defaults
+        }
+      }
+      return null;
+    }
+    return parseLayoutString(raw);
+  } catch (e) { return null; }
+}
+
+function copyShareLink() {
+  const url = window.location.origin + window.location.pathname + '#' + buildLayoutString();
+  navigator.clipboard.writeText(url).then(
+    () => { const b = document.getElementById('shareBtn'); const o = b.textContent; b.textContent = 'Copied'; setTimeout(() => b.textContent = o, 1500); },
+    () => { alert(url); }
+  );
 }
 
 const ROT_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>';
@@ -772,6 +867,8 @@ function resetPositions() {
     t.group.rotation.y = 0;
   }
   updatePositionsPanel();
+  history.replaceState(null, '', window.location.pathname);
+  try { localStorage.removeItem(LS_KEY); } catch (e) {}
 }
 
 function copyLayout() {
@@ -818,6 +915,7 @@ document.getElementById('showLabels').addEventListener('change', applyVisibility
 document.getElementById('showGrid').addEventListener('change', applyVisibility);
 document.getElementById('resetBtn').addEventListener('click', resetPositions);
 document.getElementById('copyBtn').addEventListener('click', copyLayout);
+document.getElementById('shareBtn').addEventListener('click', copyShareLink);
 
 document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => {
   const v = b.dataset.view;
