@@ -34,8 +34,14 @@
   #positions h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
   #positions .muted { color: var(--muted); font-weight: normal; text-transform: none; letter-spacing: 0; }
   #positionsList { font: 12px ui-monospace, Menlo, monospace; line-height: 1.5; }
-  #positionsList .pos-row { display: flex; gap: 8px; align-items: center; }
+  #positionsList .pos-row { display: flex; gap: 8px; align-items: center; margin: 2px 0; }
   #positionsList .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  #positionsList .rot-btn {
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+    color: var(--text); padding: 2px 6px 1px; border-radius: 4px;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  #positionsList .rot-btn:hover { background: rgba(255,255,255,0.14); }
   body.dragging { cursor: grabbing !important; }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
   .row label { flex: 1; }
@@ -83,7 +89,7 @@
 <div id="positions" class="panel">
   <h2>Tent positions <span class="muted">(NW corner)</span></h2>
   <div id="positionsList"></div>
-  <div class="muted" style="margin-top:6px;font-size:11px;">Drag a tent on the mat to move it · snaps to 1 m grid</div>
+  <div class="muted" style="margin-top:6px;font-size:11px;">Drag a tent on the mat to move (snaps to 1 m). Double-click a tent or use the rotate button to spin 90°. White arrow on each tent points to its current "north".</div>
 </div>
 
 <div id="legend" class="panel">
@@ -113,7 +119,6 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DragControls } from 'three/addons/controls/DragControls.js';
 
 // ─── Mat physical dimensions (meters) ───────────────────────────────────────
 const MAT_W = 17;   // x-axis (image horizontal)
@@ -469,10 +474,14 @@ function makeLabel(text, color) {
 }
 
 async function buildWalls(wallHeight) {
-  // Save current drag positions so a wall-height change doesn't reset placements
-  const savedOffsets = new Map();
+  // Save current drag positions + rotation so a wall-height change doesn't reset placements
+  const saved = new Map();
   for (const t of tents) {
-    savedOffsets.set(t.building.short, { x: t.group.position.x, z: t.group.position.z });
+    saved.set(t.building.short, {
+      x: t.group.position.x,
+      z: t.group.position.z,
+      rot: t.group.rotation.y,
+    });
   }
 
   // clear old
@@ -490,28 +499,43 @@ async function buildWalls(wallHeight) {
   labels.length = 0;
 
   for (const building of buildings) {
+    const fp = building.footprint;
+    // Tent's group pivots around its OWN center so rotation stays in place
+    const centerX = fp.x + fp.w / 2;
+    const centerZ = fp.z + fp.d / 2;
+
     const tentGroup = new THREE.Group();
     tentGroup.name = building.short;
     tentGroup.userData = { tent: true, building };
+    tentGroup.position.set(centerX, 0, centerZ);
 
-    // Footprint marker (semi-transparent colored floor — also helps with click/raycast)
-    const fp = building.footprint;
+    // Footprint marker — centered at group origin
     const floorGeom = new THREE.PlaneGeometry(fp.w, fp.d);
     floorGeom.rotateX(-Math.PI / 2);
     const floorMat = new THREE.MeshBasicMaterial({
       color: building.color, transparent: true, opacity: 0.18, depthWrite: false
     });
     const floor = new THREE.Mesh(floorGeom, floorMat);
-    floor.position.set(fp.x + fp.w / 2, 0.02, fp.z + fp.d / 2);
+    floor.position.set(0, 0.02, 0);
     floor.userData.isFootprint = true;
     tentGroup.add(floor);
 
-    // Tent label on the floor (small badge at NW corner)
+    // Tent badge label at center
     const tentLabel = makeLabel(building.short, building.color);
-    tentLabel.position.set(fp.x + fp.w / 2, 0.04, fp.z + fp.d / 2);
+    tentLabel.position.set(0, 0.04, 0);
     tentLabel.scale.set(1.4, 0.36, 1);
     tentLabel.userData.isTentLabel = true;
     tentGroup.add(tentLabel);
+
+    // Small "N" indicator on the north edge so rotation is visible
+    const arrowShape = new THREE.Shape();
+    arrowShape.moveTo(0, 0.25); arrowShape.lineTo(0.15, -0.1); arrowShape.lineTo(-0.15, -0.1); arrowShape.lineTo(0, 0.25);
+    const arrowGeom = new THREE.ShapeGeometry(arrowShape);
+    arrowGeom.rotateX(-Math.PI / 2);
+    const arrow = new THREE.Mesh(arrowGeom, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    arrow.position.set(0, 0.03, -fp.d / 2 + 0.35);
+    arrow.userData.isArrow = true;
+    tentGroup.add(arrow);
 
     for (const wall of building.walls) {
       const [sx, sz] = wall.start;
@@ -529,7 +553,6 @@ async function buildWalls(wallHeight) {
         const panelW = panel.w;
         const actualH = wallHeight;
 
-        // Two thin planes back-to-back so each face can have its own texture
         const geomIn = new THREE.PlaneGeometry(panelW, actualH);
         const matIn = new THREE.MeshStandardMaterial({ map: insideTex, roughness: 0.92, metalness: 0, side: THREE.FrontSide });
         const meshIn = new THREE.Mesh(geomIn, matIn);
@@ -543,9 +566,11 @@ async function buildWalls(wallHeight) {
         meshOut.userData = { face: 'outside', label: panel.label };
         meshOut.castShadow = true; meshOut.receiveShadow = true;
 
-        // Position panel along wall (absolute coords inside tentGroup — works because tentGroup starts at 0,0,0)
-        const cx = sx + (accum + panelW / 2) * dirX;
-        const cz = sz + (accum + panelW / 2) * dirZ;
+        // Coords RELATIVE to tent center (so rotation around the group origin pivots on the center)
+        const worldCx = sx + (accum + panelW / 2) * dirX;
+        const worldCz = sz + (accum + panelW / 2) * dirZ;
+        const cx = worldCx - centerX;
+        const cz = worldCz - centerZ;
         const cy = actualH / 2;
 
         const panelGroup = new THREE.Group();
@@ -558,7 +583,6 @@ async function buildWalls(wallHeight) {
         panelGroup.add(meshOut);
         tentGroup.add(panelGroup);
 
-        // Label sprite
         const label = makeLabel(panel.label, building.color);
         label.position.set(cx, actualH + 0.55, cz);
         label.userData.isWallLabel = true;
@@ -569,15 +593,18 @@ async function buildWalls(wallHeight) {
       }
     }
 
-    // Restore previous drag offset (if any)
-    const saved = savedOffsets.get(building.short);
-    if (saved) tentGroup.position.set(saved.x, 0, saved.z);
+    // Restore previous drag offset + rotation (if any)
+    const s = saved.get(building.short);
+    if (s) {
+      tentGroup.position.x = s.x;
+      tentGroup.position.z = s.z;
+      tentGroup.rotation.y = s.rot;
+    }
 
     scene.add(tentGroup);
     tents.push({ group: tentGroup, building });
   }
 
-  rebuildDragControls();
   applyVisibility();
   updatePositionsPanel();
 }
@@ -597,52 +624,106 @@ function applyVisibility() {
   gridGroup.visible = showGrid;
 }
 
-// ─── Drag controls ─────────────────────────────────────────────────────────
-let dragControls = null;
-function rebuildDragControls() {
-  if (dragControls) {
-    dragControls.deactivate();
-    dragControls.dispose();
+// ─── Custom drag (ground-plane raycast, locks Y, snaps to 1 m grid) ────────
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const _gpHit = new THREE.Vector3();
+let draggedTent = null;
+let dragGrabOffset = new THREE.Vector2();  // (group.x - mouseGroundX, group.z - mouseGroundZ)
+
+function mouseToNDC(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouseNDC.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function mouseToGround(event) {
+  mouseToNDC(event);
+  raycaster.setFromCamera(mouseNDC, camera);
+  return raycaster.ray.intersectPlane(groundPlane, _gpHit) ? _gpHit.clone() : null;
+}
+
+function findTentAtCursor(event) {
+  mouseToNDC(event);
+  raycaster.setFromCamera(mouseNDC, camera);
+  for (const t of tents) {
+    if (raycaster.intersectObject(t.group, true).length > 0) return t;
   }
-  dragControls = new DragControls(tents.map(t => t.group), camera, renderer.domElement);
-  dragControls.recursive = true;
-  dragControls.addEventListener('dragstart', (e) => {
-    controls.enabled = false;
-    document.body.classList.add('dragging');
-    // Lift the dragged tent slightly so its movement is obvious
-    e.object.userData.dragStartY = e.object.position.y;
-  });
-  dragControls.addEventListener('drag', (e) => {
-    const tent = tents.find(t => t.group === e.object);
-    if (!tent) return;
-    const fp = tent.building.footprint;
-    // Snap to 1m grid (event.object.position is the tent's offset; original corner = fp.x, fp.z)
-    e.object.position.y = 0;
-    e.object.position.x = Math.round(e.object.position.x);
-    e.object.position.z = Math.round(e.object.position.z);
-    // Clamp so the tent stays on the mat
-    const minX = -fp.x;
-    const maxX = MAT_W - fp.x - fp.w;
-    const minZ = -fp.z;
-    const maxZ = MAT_D - fp.z - fp.d;
-    e.object.position.x = Math.max(minX, Math.min(maxX, e.object.position.x));
-    e.object.position.z = Math.max(minZ, Math.min(maxZ, e.object.position.z));
-    updatePositionsPanel();
-  });
-  dragControls.addEventListener('dragend', () => {
-    controls.enabled = true;
-    document.body.classList.remove('dragging');
-    updatePositionsPanel();
-  });
+  return null;
+}
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  const tent = findTentAtCursor(event);
+  if (!tent) return;
+  const ground = mouseToGround(event);
+  if (!ground) return;
+  draggedTent = tent;
+  dragGrabOffset.set(tent.group.position.x - ground.x, tent.group.position.z - ground.z);
+  controls.enabled = false;
+  document.body.classList.add('dragging');
+  event.preventDefault();
+});
+
+renderer.domElement.addEventListener('pointermove', (event) => {
+  if (!draggedTent) return;
+  const ground = mouseToGround(event);
+  if (!ground) return;
+  const fp = draggedTent.building.footprint;
+  // Snap so the NW CORNER lands on an integer grid line:
+  //   centerX - fp.w/2 should be an integer → centerX should be (integer + fp.w/2)
+  //   Equivalent to: Math.round(centerX - fp.w/2) + fp.w/2
+  let newX = ground.x + dragGrabOffset.x;
+  let newZ = ground.z + dragGrabOffset.y;
+  newX = Math.round(newX - fp.w / 2) + fp.w / 2;
+  newZ = Math.round(newZ - fp.d / 2) + fp.d / 2;
+  // Clamp so the whole tent stays on the mat
+  newX = Math.max(fp.w / 2, Math.min(MAT_W - fp.w / 2, newX));
+  newZ = Math.max(fp.d / 2, Math.min(MAT_D - fp.d / 2, newZ));
+  draggedTent.group.position.set(newX, 0, newZ);   // Y locked to 0
+  updatePositionsPanel();
+});
+
+window.addEventListener('pointerup', () => {
+  if (!draggedTent) return;
+  draggedTent = null;
+  controls.enabled = true;
+  document.body.classList.remove('dragging');
+  updatePositionsPanel();
+});
+
+// Double-click rotates a tent 90° CW around its own center
+renderer.domElement.addEventListener('dblclick', (event) => {
+  const tent = findTentAtCursor(event);
+  if (!tent) return;
+  rotateTent(tent, -Math.PI / 2);  // CW
+  event.preventDefault();
+});
+
+function rotateTent(tent, deltaRad) {
+  tent.group.rotation.y += deltaRad;
+  // Normalize to nearest 90° step
+  const step = Math.round(tent.group.rotation.y / (Math.PI / 2));
+  tent.group.rotation.y = step * (Math.PI / 2);
+  updatePositionsPanel();
 }
 
 function tentPosition(tent) {
+  // Square tents — NW corner is always center - (w/2, d/2)
   const fp = tent.building.footprint;
   return {
-    x: fp.x + tent.group.position.x,
-    z: fp.z + tent.group.position.z,
+    x: tent.group.position.x - fp.w / 2,
+    z: tent.group.position.z - fp.d / 2,
   };
 }
+
+function tentRotationDeg(tent) {
+  const step = ((Math.round(tent.group.rotation.y / (Math.PI / 2)) % 4) + 4) % 4;
+  return step * 90;
+}
+
+const ROT_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>';
 
 function updatePositionsPanel() {
   const list = document.getElementById('positionsList');
@@ -650,6 +731,7 @@ function updatePositionsPanel() {
   list.innerHTML = '';
   for (const t of tents) {
     const p = tentPosition(t);
+    const rot = tentRotationDeg(t);
     const row = document.createElement('div');
     row.className = 'pos-row';
     const swatch = document.createElement('span');
@@ -657,31 +739,43 @@ function updatePositionsPanel() {
     swatch.style.background = '#' + t.building.color.toString(16).padStart(6, '0');
     row.appendChild(swatch);
     const text = document.createElement('span');
-    text.textContent = `${t.building.short.padEnd(6)} (${p.x}, ${p.z}) → (${p.x + t.building.footprint.w}, ${p.z + t.building.footprint.d})`;
+    text.style.flex = '1';
+    text.textContent = `${t.building.short.padEnd(6)} (${p.x}, ${p.z})  rot ${rot}`;
     row.appendChild(text);
+    const rotBtn = document.createElement('button');
+    rotBtn.className = 'rot-btn';
+    rotBtn.innerHTML = ROT_ICON_SVG;
+    rotBtn.title = 'Rotate 90 degrees clockwise';
+    rotBtn.addEventListener('click', () => rotateTent(t, -Math.PI / 2));
+    row.appendChild(rotBtn);
     list.appendChild(row);
   }
 }
 
 function resetPositions() {
-  for (const t of tents) t.group.position.set(0, 0, 0);
+  for (const t of tents) {
+    const fp = t.building.footprint;
+    t.group.position.set(fp.x + fp.w / 2, 0, fp.z + fp.d / 2);
+    t.group.rotation.y = 0;
+  }
   updatePositionsPanel();
 }
 
 function copyLayout() {
   const lines = [
-    `FACTS 2026 Fall — Mat layout (17 × 12 m, 1 m grid)`,
-    `Each tent is 3 × 3 m. Coordinates are NW corner → SE corner (in meters):`,
+    `FACTS 2026 Fall - Mat layout (17 x 12 m, 1 m grid)`,
+    `Each tent is 3 x 3 m. Coordinates are NW corner of each tent on the mat:`,
     ``,
   ];
   for (const t of tents) {
     const p = tentPosition(t);
+    const rot = tentRotationDeg(t);
     lines.push(`  ${t.building.short.padEnd(6)} ${t.building.name}`);
-    lines.push(`         (${p.x}, ${p.z}) → (${p.x + t.building.footprint.w}, ${p.z + t.building.footprint.d})`);
+    lines.push(`         NW corner (${p.x}, ${p.z}) m   rotation ${rot} deg`);
   }
   const text = lines.join('\n');
   navigator.clipboard.writeText(text).then(
-    () => { const b = document.getElementById('copyBtn'); const o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(() => b.textContent = o, 1500); },
+    () => { const b = document.getElementById('copyBtn'); const o = b.textContent; b.textContent = 'Copied'; setTimeout(() => b.textContent = o, 1500); },
     () => { alert(text); }
   );
 }
