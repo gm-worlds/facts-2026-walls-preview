@@ -158,7 +158,7 @@
   <div class="row"><label><input type="checkbox" id="showInside" checked> Show interior faces</label></div>
   <div class="row"><label><input type="checkbox" id="showLabels" checked> Show wall labels</label></div>
   <div class="row"><label><input type="checkbox" id="showGrid" checked> Show 1m grid</label></div>
-  <div class="row always-on"><label><input type="checkbox" id="lockTents"> Lock tents</label></div>
+  <div class="row always-on"><label><input type="checkbox" id="lockTents" checked> Lock tents</label></div>
   <div class="btn-row always-on">
     <button class="preset-btn" data-view="top">Top</button>
     <button class="preset-btn" data-view="iso">Iso</button>
@@ -237,7 +237,8 @@ const T = {
   gtw_int_plain:    'textures/gtw-int-plastered.jpg',
   gtw_int_window:   'textures/gtw-int-window.jpg',
   gtw_ext_mossy:    'textures/gtw-ext-mossy.jpg',
-  gtw_ext_window:   'textures/gtw-ext-window-mossy.jpg',
+  gtw_ext_window:   'textures/gtw-ext-window-mossy.jpg',      // with silhouette (courtyard side)
+  gtw_ext_window_day: 'textures/gtw-ext-window-daytime.jpg',  // no silhouette (outer side)
   gtw_ext_graffiti: 'textures/gtw-ext-window-graffiti.jpg',
   stone_magical:    'textures/stone-magical-mossy.jpg',
   stone_standard:   'textures/stone-standard.jpg',
@@ -273,9 +274,9 @@ const buildings = [
     color: 0xd45698,
     footprint: { x: 5, z: 0, w: 3, d: 3 },
     walls: [
-      { // North wall — GTW-3 (WINDOW, faces north mat edge)
+      { // North wall — GTW-3 (WINDOW, faces north mat edge — daytime window, no silhouette)
         start: [5, 0], end: [8, 0],
-        panels: [{ label: 'GTW-3', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
+        panels: [{ label: 'GTW-3', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window_day }],
         outsideOnNegativeSide: false,
       },
       { // West wall — GTW-2 (plastered mossy, faces west mat edge)
@@ -297,9 +298,9 @@ const buildings = [
     color: 0xd45698,
     footprint: { x: 9, z: 0, w: 3, d: 3 },
     walls: [
-      { // North wall — GTW-4 (WINDOW, faces north mat edge)
+      { // North wall — GTW-4 (WINDOW, faces north mat edge — daytime window, no silhouette)
         start: [9, 0], end: [12, 0],
-        panels: [{ label: 'GTW-4', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window }],
+        panels: [{ label: 'GTW-4', w: STD_W, inside: T.gtw_int_window, outside: T.gtw_ext_window_day }],
         outsideOnNegativeSide: false,
       },
       { // East wall — GTW-5 (plastered mossy, faces east mat edge)
@@ -316,123 +317,95 @@ const buildings = [
     ],
   },
 
-  // ── TINKERER'S WORKSHOP (TW) — top-left ───────────────────────────────
+  // ── TINKERER'S WORKSHOP (TW) — middle-left, NW corner (2, 3) ─────────
   {
     name: "Tinkerer's Workshop (TW)",
     short: "TW",
     color: 0x5a9ed1,
-    footprint: { x: 1, z: 4, w: 3, d: 3 },
+    footprint: { x: 2, z: 3, w: 3, d: 3 },
     walls: [
-      { // North wall — TWI-1 (magical mossy)
-        start: [1, 4], end: [4, 4],
+      { start: [2, 3], end: [5, 3],
         panels: [{ label: 'TWI-1', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
-        outsideOnNegativeSide: false,
-      },
-      { // West wall — TWI-2 (brick magical window, outer side facing mat edge)
-        start: [1, 4], end: [1, 7],
+        outsideOnNegativeSide: false },
+      { start: [2, 3], end: [2, 6],
         panels: [{ label: 'TWI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
-        outsideOnNegativeSide: true,
-      },
-      { // South wall — TWI-3 (magical mossy, faces EW across 1m gap)
-        start: [1, 7], end: [4, 7],
+        outsideOnNegativeSide: true },
+      { start: [2, 6], end: [5, 6],
         panels: [{ label: 'TWI-3', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
-        outsideOnNegativeSide: true,
-      },
-      { // East wall — TWI-4 (2m magical window, north 2m). 1m entrance at SE corner faces the pond.
-        start: [4, 4], end: [4, 6],
+        outsideOnNegativeSide: true },
+      { // East wall TWI-4 — 2m at the north end. 1m entrance at SE corner faces the pond.
+        start: [5, 3], end: [5, 5],
         panels: [{ label: 'TWI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
-        outsideOnNegativeSide: false,
-      },
+        outsideOnNegativeSide: false },
     ],
   },
 
-  // ── DRAGON'S LAIR (DL) — top-right ────────────────────────────────────
+  // ── DRAGON'S LAIR (DL) — middle-right, NW corner (12, 3) ──────────────
   {
     name: "Dragon's Lair (DL)",
     short: "DL",
     color: 0xd4a93f,
-    footprint: { x: 13, z: 4, w: 3, d: 3 },
+    footprint: { x: 12, z: 3, w: 3, d: 3 },
     walls: [
-      { // North wall — DLI-1 (magical mossy)
-        start: [13, 4], end: [16, 4],
+      { start: [12, 3], end: [15, 3],
         panels: [{ label: 'DLI-1', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
-        outsideOnNegativeSide: false,
-      },
-      { // East wall — DLI-2 (brick magical window, outer side facing mat edge)
-        start: [16, 4], end: [16, 7],
+        outsideOnNegativeSide: false },
+      { start: [15, 3], end: [15, 6],
         panels: [{ label: 'DLI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
-        outsideOnNegativeSide: false,
-      },
-      { // South wall — DLI-3 (magical mossy, faces SA across 1m gap)
-        start: [13, 7], end: [16, 7],
+        outsideOnNegativeSide: false },
+      { start: [12, 6], end: [15, 6],
         panels: [{ label: 'DLI-3', w: STD_W, inside: T.stone_magical, outside: T.stone_magical }],
-        outsideOnNegativeSide: true,
-      },
-      { // West wall — DLI-4 (2m magical window, north 2m). 1m entrance at SW corner faces the pond.
-        start: [13, 4], end: [13, 6],
+        outsideOnNegativeSide: true },
+      { // West wall DLI-4 — 2m at the north end. 1m entrance at SW corner faces the pond.
+        start: [12, 3], end: [12, 5],
         panels: [{ label: 'DLI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
-        outsideOnNegativeSide: true,
-      },
+        outsideOnNegativeSide: true },
     ],
   },
 
-  // ── ELEMENTAL WORKSHOP (EW) — bottom-left ─────────────────────────────
+  // ── ELEMENTAL WORKSHOP (EW) — bottom-left, NW corner (2, 6) ───────────
   {
     name: 'Elemental Workshop (EW)',
     short: "EW",
     color: 0x7ab35c,
-    footprint: { x: 1, z: 8, w: 3, d: 3 },
+    footprint: { x: 2, z: 6, w: 3, d: 3 },
     walls: [
-      { // North wall — EWI-3 (standard stone, faces TW across 1m gap)
-        start: [1, 8], end: [4, 8],
+      { start: [2, 6], end: [5, 6],
         panels: [{ label: 'EWI-3', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
-        outsideOnNegativeSide: false,
-      },
-      { // West wall — EWI-2 (brick magical window, outer side facing mat edge)
-        start: [1, 8], end: [1, 11],
+        outsideOnNegativeSide: false },
+      { start: [2, 6], end: [2, 9],
         panels: [{ label: 'EWI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
-        outsideOnNegativeSide: true,
-      },
-      { // South wall — EWI-1 (standard stone)
-        start: [1, 11], end: [4, 11],
+        outsideOnNegativeSide: true },
+      { start: [2, 9], end: [5, 9],
         panels: [{ label: 'EWI-1', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
-        outsideOnNegativeSide: true,
-      },
-      { // East wall — EWI-4 (2m magical window, south 2m). 1m entrance at NE corner faces the pond.
-        start: [4, 9], end: [4, 11],
+        outsideOnNegativeSide: true },
+      { // East wall EWI-4 — 2m at the south end. 1m entrance at NE corner faces the pond.
+        start: [5, 7], end: [5, 9],
         panels: [{ label: 'EWI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
-        outsideOnNegativeSide: false,
-      },
+        outsideOnNegativeSide: false },
     ],
   },
 
-  // ── SHADY ALLEY (SA) — bottom-right ───────────────────────────────────
+  // ── SHADY ALLEY (SA) — bottom-right, NW corner (12, 6) ────────────────
   {
     name: 'Shady Alley (SA)',
     short: "SA",
     color: 0x3fb5b5,
-    footprint: { x: 13, z: 8, w: 3, d: 3 },
+    footprint: { x: 12, z: 6, w: 3, d: 3 },
     walls: [
-      { // North wall — SAI-3 (standard stone, faces DL across 1m gap)
-        start: [13, 8], end: [16, 8],
+      { start: [12, 6], end: [15, 6],
         panels: [{ label: 'SAI-3', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
-        outsideOnNegativeSide: false,
-      },
-      { // East wall — SAI-2 (brick magical window, outer side facing mat edge)
-        start: [16, 8], end: [16, 11],
+        outsideOnNegativeSide: false },
+      { start: [15, 6], end: [15, 9],
         panels: [{ label: 'SAI-2', w: STD_W, inside: T.window_brick, outside: T.window_brick }],
-        outsideOnNegativeSide: false,
-      },
-      { // South wall — SAI-1 (standard stone)
-        start: [13, 11], end: [16, 11],
+        outsideOnNegativeSide: false },
+      { start: [12, 9], end: [15, 9],
         panels: [{ label: 'SAI-1', w: STD_W, inside: T.stone_standard, outside: T.stone_standard }],
-        outsideOnNegativeSide: true,
-      },
-      { // West wall — SAI-4 (2m magical window, south 2m). 1m entrance at NW corner faces the pond.
-        start: [13, 9], end: [13, 11],
+        outsideOnNegativeSide: true },
+      { // West wall SAI-4 — 2m at the south end. 1m entrance at NW corner faces the pond.
+        start: [12, 7], end: [12, 9],
         panels: [{ label: 'SAI-4', w: NAR_W, inside: T.window_2m, outside: T.window_2m, aspect: ASPECT_NAR }],
-        outsideOnNegativeSide: true,
-      },
+        outsideOnNegativeSide: true },
     ],
   },
 ];
