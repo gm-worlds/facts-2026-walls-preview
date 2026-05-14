@@ -43,6 +43,84 @@
   }
   #positionsList .rot-btn:hover { background: rgba(255,255,255,0.14); }
   body.dragging { cursor: grabbing !important; }
+
+  /* Collapsible panel via .collapsed class */
+  .panel-head { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .panel-head h2 { margin: 0; }
+  .panel.collapsed .panel-body { display: none; }
+  .chev { width: 14px; height: 14px; transition: transform 0.18s ease; color: var(--muted); }
+  .panel.collapsed .chev { transform: rotate(-90deg); }
+
+  #mobile-fab {
+    display: none;
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 11;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 14px;
+    color: var(--text);
+    font: 600 13px -apple-system, sans-serif;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  }
+  #mobile-fab:active { transform: translateY(1px); }
+
+  @media (max-width: 820px) {
+    /* Hide non-essential panels on mobile */
+    #header, #legend, #help { display: none; }
+
+    /* Floating action button to open the controls drawer */
+    #mobile-fab { display: flex; align-items: center; gap: 6px; }
+
+    /* Single bottom drawer that holds positions + controls */
+    #drawer {
+      position: fixed; left: 8px; right: 8px; bottom: 8px;
+      z-index: 10;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      max-height: 60vh;
+      overflow-y: auto;
+      transform: translateY(calc(100% + 16px));
+      transition: transform 0.22s ease;
+    }
+    body.drawer-open #drawer { transform: translateY(0); }
+
+    /* On mobile, both controls and positions live INSIDE #drawer */
+    #drawer #controls, #drawer #positions {
+      position: static;
+      background: transparent;
+      border: none;
+      padding: 8px 0;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      min-width: 0; max-width: none;
+    }
+    #drawer #controls { border-bottom: 1px solid var(--border); }
+    #drawer #positions h2,
+    #drawer #controls h2 { font-size: 11px; }
+    #drawer #positionsList { font-size: 12px; max-height: 26vh; overflow-y: auto; }
+    .preset-btn { padding: 8px 12px; font-size: 12px; }
+  }
+
+  /* On wider screens, keep the drawer invisible — panels stay in corners */
+  @media (min-width: 821px) {
+    #drawer { display: contents; }
+    #mobile-fab { display: none; }
+  }
+
+  /* Bigger tap targets on touch */
+  @media (pointer: coarse) {
+    .preset-btn { min-height: 36px; padding: 8px 14px; }
+    .rot-btn { min-height: 28px; min-width: 30px; padding: 4px 8px; }
+    input[type=range] { height: 28px; }
+  }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
   .row label { flex: 1; }
   .row input[type=range] { flex: 1; }
@@ -57,8 +135,9 @@
   #loading.hide { opacity: 0; pointer-events: none; }
   .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .preset-btn { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font: inherit; cursor: pointer; margin-right: 4px; margin-top: 4px; }
+  .preset-btn { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font: inherit; cursor: pointer; }
   .preset-btn:hover { background: rgba(255,255,255,0.12); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 4px; }
 </style>
 </head>
 <body>
@@ -69,6 +148,8 @@
   <p>FACTS 2026 Fall · 12 × 17 m floor mat. Best-guess wall placement — adjust positions in <code>index.html</code>.</p>
 </div>
 
+<button id="mobile-fab">Tools</button>
+<div id="drawer">
 <div id="controls" class="panel">
   <h2>View</h2>
   <div class="row"><label>Wall height (m)</label><input type="range" id="wallHeight" min="2" max="4" step="0.05" value="2.5"></div>
@@ -77,15 +158,16 @@
   <div class="row"><label><input type="checkbox" id="showInside" checked> Show interior faces</label></div>
   <div class="row"><label><input type="checkbox" id="showLabels" checked> Show wall labels</label></div>
   <div class="row"><label><input type="checkbox" id="showGrid" checked> Show 1m grid</label></div>
-  <div>
+  <div class="row always-on"><label><input type="checkbox" id="lockTents"> Lock tents</label></div>
+  <div class="btn-row always-on">
     <button class="preset-btn" data-view="top">Top</button>
     <button class="preset-btn" data-view="iso">Iso</button>
     <button class="preset-btn" data-view="ground">Ground</button>
   </div>
-  <div style="margin-top:10px">
-    <button class="preset-btn" id="resetBtn">Reset positions</button>
-    <button class="preset-btn" id="copyBtn">Copy layout</button>
-    <button class="preset-btn" id="shareBtn">Copy share link</button>
+  <div class="btn-row" style="margin-top:8px">
+    <button class="preset-btn" id="resetBtn">Reset</button>
+    <button class="preset-btn" id="copyBtn">Copy text</button>
+    <button class="preset-btn" id="shareBtn">Share link</button>
   </div>
 </div>
 
@@ -94,6 +176,7 @@
   <div id="positionsList"></div>
   <div class="muted" style="margin-top:6px;font-size:11px;">Drag a tent on the mat to move (snaps to 1 m). Double-click a tent or use the rotate button to spin 90°. White arrow on each tent points to its current "north".</div>
 </div>
+</div><!-- /drawer -->
 
 <div id="legend" class="panel">
   <h2>Tents (6 × 3 m × 3 m)</h2>
@@ -672,8 +755,14 @@ function findTentAtCursor(event) {
   return null;
 }
 
+function isLocked() {
+  const el = document.getElementById('lockTents');
+  return el ? el.checked : false;
+}
+
 renderer.domElement.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
+  if (isLocked()) return;  // Locked: skip tent grab so OrbitControls handles the gesture
   const tent = findTentAtCursor(event);
   if (!tent) return;
   const ground = mouseToGround(event);
@@ -715,6 +804,7 @@ window.addEventListener('pointerup', () => {
 
 // Double-click rotates a tent 90° CW around its own center
 renderer.domElement.addEventListener('dblclick', (event) => {
+  if (isLocked()) return;
   const tent = findTentAtCursor(event);
   if (!tent) return;
   rotateTent(tent, -Math.PI / 2);  // CW
@@ -916,6 +1006,28 @@ document.getElementById('showGrid').addEventListener('change', applyVisibility);
 document.getElementById('resetBtn').addEventListener('click', resetPositions);
 document.getElementById('copyBtn').addEventListener('click', copyLayout);
 document.getElementById('shareBtn').addEventListener('click', copyShareLink);
+
+// Lock toggle — persist in localStorage and read on init
+const lockEl = document.getElementById('lockTents');
+try { if (localStorage.getItem('facts2026-locked') === '1') lockEl.checked = true; } catch (e) {}
+lockEl.addEventListener('change', () => {
+  try { localStorage.setItem('facts2026-locked', lockEl.checked ? '1' : '0'); } catch (e) {}
+});
+
+// Mobile drawer toggle
+const fab = document.getElementById('mobile-fab');
+fab.addEventListener('click', () => {
+  document.body.classList.toggle('drawer-open');
+  fab.textContent = document.body.classList.contains('drawer-open') ? 'Close' : 'Tools';
+});
+// Close drawer when tapping outside it (on mobile)
+document.addEventListener('pointerdown', (e) => {
+  if (!document.body.classList.contains('drawer-open')) return;
+  const drawer = document.getElementById('drawer');
+  if (drawer && (drawer.contains(e.target) || e.target === fab)) return;
+  document.body.classList.remove('drawer-open');
+  fab.textContent = 'Tools';
+}, true);
 
 document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => {
   const v = b.dataset.view;
